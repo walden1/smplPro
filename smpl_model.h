@@ -64,6 +64,7 @@ public:
 	void saveMeshWithNormal(std::string file);
 	void saveJoints(std::string file);
 	void saveParams(std::string file);
+	template<typename T> void test_ceres_pos(T temp);
 
 	Eigen::MatrixXf        getVertsTemplate() { return  mapEigenVec2Mat<float>(v_template_, 3, true); }
 	Eigen::MatrixXf        getVertsShaped()   { return  mapEigenVec2Mat<float>(v_shaped_, 3, true); }

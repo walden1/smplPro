@@ -155,6 +155,7 @@ void process_single(int argc, char *argv[])
 
 	smpl.setTrans(tran);
 	smpl.updateShape();
+	//smpl.test_ceres_pos<float>(1.0);
 	smpl.saveMesh("../data/generatedBycode/out.obj");
 	cout << "save mesh done" << endl;
 

@@ -102,6 +102,7 @@ void SMPL::updateShape()
 	Eigen::VectorXf lrotmin = mapEigenMat2Vec<float>(I, true);
 	Eigen::VectorXf v_posed = pose_bs_ * lrotmin + v_shaped;				// T + Bs + Bp = T + s * belta + (Rn-R0) * p ( = Ts + Bp )
 //	v_posed = v_template_;
+	v_posed = v_shaped;
 
 	//蒙皮
 	Eigen::MatrixXf G = calcJointRot(R, J);
@@ -135,6 +136,188 @@ void SMPL::updateShape()
 	saveDenseMatrix2File<float>("../data/generatedBycode/v_posed.txt", v_posed);
 	saveDenseMatrix2File<float>("../data/generatedBycode/v_shape_.txt", v_shaped_);
 }
+
+template<typename T>
+inline void Mat4Multiply(T *a, T *b, T *res)  // column-major
+{
+	res[0] = a[0] * b[0] + a[4] * b[1] + a[8] * b[2] + a[12] * b[3];
+	res[1] = a[1] * b[0] + a[5] * b[1] + a[9] * b[2] + a[13] * b[3];
+	res[2] = a[2] * b[0] + a[6] * b[1] + a[10] * b[2] + a[14] * b[3];
+	res[3] = a[3] * b[0] + a[7] * b[1] + a[11] * b[2] + a[15] * b[3];
+
+	res[4] = a[0] * b[4] + a[4] * b[5] + a[8] * b[6] + a[12] * b[7];
+	res[5] = a[1] * b[4] + a[5] * b[5] + a[9] * b[6] + a[13] * b[7];
+	res[6] = a[2] * b[4] + a[6] * b[5] + a[10] * b[6] + a[14] * b[7];
+	res[7] = a[3] * b[4] + a[7] * b[5] + a[11] * b[6] + a[15] * b[7];
+
+	res[8] = a[0] * b[8] + a[4] * b[9] + a[8] * b[10] + a[12] * b[11];
+	res[9] = a[1] * b[8] + a[5] * b[9] + a[9] * b[10] + a[13] * b[11];
+	res[10] = a[2] * b[8] + a[6] * b[9] + a[10] * b[10] + a[14] * b[11];
+	res[11] = a[3] * b[8] + a[7] * b[9] + a[11] * b[10] + a[15] * b[11];
+
+	res[12] = a[0] * b[12] + a[4] * b[13] + a[8] * b[14] + a[12] * b[15];
+	res[13] = a[1] * b[12] + a[5] * b[13] + a[9] * b[14] + a[13] * b[15];
+	res[14] = a[2] * b[12] + a[6] * b[13] + a[10] * b[14] + a[14] * b[15];
+	res[15] = a[3] * b[12] + a[7] * b[13] + a[11] * b[14] + a[15] * b[15];
+}
+
+template<typename T>
+void vec10Multiply(Eigen::RowVectorXf mat1, T * mat2, T &res){
+	T sum(0);
+	for (int i = 0; i < 10; i++){
+		sum = sum + T(mat1[i]) * mat2[i];
+	}
+	res = sum;
+}
+
+template<typename T>
+void SMPL::test_ceres_pos(T temp){
+
+	Eigen::MatrixXf * shape_bs_ptr_ = &shape_bs_;
+	Eigen::MatrixXi	* joint_kintree_table_ptr_ = &joint_kintree_table_;
+	//---------------
+	Eigen::VectorXf v_shaped = shape_bs_ * beta_ + v_template_;
+	
+	Eigen::MatrixXf J = joint_weights_ * mapEigenVec2Mat<float>(v_shaped, 3, true);
+	Eigen::MatrixXf * skin_weights_ptr_ = &skin_weights_;
+
+	T x_belta[10] = { T(0.0) };	for (int i = 0; i < 10; i++){ x_belta[i] = beta_(i); }
+	T x_theta[72] = { T(0.0) };	
+	for (int i = 0; i < 24; i++)
+	{ 
+		x_theta[3 * i + 0] = theta_( i, 0); 
+		x_theta[3 * i + 1] = theta_( i, 1);
+		x_theta[3 * i + 2] = theta_( i, 2);
+	}
+	T x_trans[3] = { T(0.0) };	for (int i = 0; i < 3; i++){ x_trans[i] = trans_(i); }
+
+	for (int index_ = 0; index_ < v_num_; index_++)
+	{
+		Eigen::Vector3f v_template_pose_(v_template_(3 * index_ + 0), v_template_(3 * index_ + 1), v_template_(3 * index_ + 2));
+
+		T vertex_pos_bef[3] = { T(0.0) };	
+		
+		vec10Multiply<T>(shape_bs_ptr_->row(3 * index_ + 0), x_belta, vertex_pos_bef[0]);
+		vec10Multiply<T>(shape_bs_ptr_->row(3 * index_ + 1), x_belta, vertex_pos_bef[1]);
+		vec10Multiply<T>(shape_bs_ptr_->row(3 * index_ + 2), x_belta, vertex_pos_bef[2]);
+		vertex_pos_bef[0] = vertex_pos_bef[0] + T(v_template_pose_(0));
+		vertex_pos_bef[1] = vertex_pos_bef[1] + T(v_template_pose_(1));
+		vertex_pos_bef[2] = vertex_pos_bef[2] + T(v_template_pose_(2));
+
+		T R[24][9] = { T(0.0) };
+		for (int i = 0; i < 24; i++){
+			T * rotMat_i = new T[9];
+			T angle_axis[3] = { x_theta[3 * i + 0], x_theta[3 * i + 1], x_theta[3 * i + 2] };
+			Eigen::Vector3f a_axis(angle_axis[0], angle_axis[1], angle_axis[2]);
+			Eigen::Matrix3f R1 = rodrigues(a_axis);
+			rotMat_i[0] = R1(0, 0); rotMat_i[1] = R1(1, 0); rotMat_i[2] = R1(2, 0);
+			rotMat_i[3] = R1(0, 1); rotMat_i[4] = R1(1, 1); rotMat_i[5] = R1(2, 1);
+			rotMat_i[6] = R1(0, 2); rotMat_i[7] = R1(1, 2); rotMat_i[8] = R1(2, 2);
+			//ceres::AngleAxisToRotationMatrix(angle_axis, rotMat_i);
+			for (int j = 0; j < 9; j++){
+				R[i][j] = rotMat_i[j];
+			}
+		}
+
+		T G[24][16] = { T(0.0) };
+		G[0][0] = R[0][0]; G[0][1] = R[0][1]; G[0][2] = R[0][2];
+		G[0][4] = R[0][3]; G[0][5] = R[0][4]; G[0][6] = R[0][5];
+		G[0][8] = R[0][6]; G[0][9] = R[0][7]; G[0][10] = R[0][8];
+		G[0][12] = T(J(0, 0)); G[0][13] = T(J(0, 1)); G[0][14] = T(J(0, 2));
+		G[0][15] = T(1.0);
+
+		for (int jt = 1; jt < 24; jt++){
+			int parent = joint_kintree_table_ptr_->coeffRef(0, jt);
+			T Gi[16] = { T(0.0) };
+			Gi[0] = R[jt][0]; Gi[1] = R[jt][1]; Gi[2] = R[jt][2];
+			Gi[4] = R[jt][3]; Gi[5] = R[jt][4]; Gi[6] = R[jt][5];
+			Gi[8] = R[jt][6]; Gi[9] = R[jt][7]; Gi[10] = R[jt][8];
+			Gi[12] = T(J(jt, 0) - J(parent, 0));
+			Gi[13] = T(J(jt, 1) - J(parent, 1));
+			Gi[14] = T(J(jt, 2) - J(parent, 2));
+			Gi[15] = T(1.0);
+
+			T res[16] = { T(0.0) };
+			Mat4Multiply<T>(G[parent], Gi, res);
+
+			for (int i = 0; i < 16; i++)  { G[jt][i] = res[i]; }
+
+		}
+
+		for (int jt = 0; jt < 24; jt++){
+			T J0[4] = { T(0.0f) };
+			J0[0] = T(J(jt, 0)); J0[1] = T(J(jt, 1)); J0[2] = T(J(jt, 2));
+
+			T z0 = G[jt][0] * J0[0] + G[jt][4] * J0[1] + G[jt][8] * J0[2];
+			T z1 = G[jt][1] * J0[0] + G[jt][5] * J0[1] + G[jt][9] * J0[2];
+			T z2 = G[jt][2] * J0[0] + G[jt][6] * J0[1] + G[jt][10] * J0[2];
+
+			G[jt][12] = G[jt][12] - z0;
+			G[jt][13] = G[jt][13] - z1;
+			G[jt][14] = G[jt][14] - z2;
+		}
+
+
+		Eigen::RowVectorXf s_weight = skin_weights_ptr_->row(index_);
+		T vertex_transform[16] = { T(0.0) };
+
+		//方案1
+		for (int i = 0; i < 16; i++){
+			for (int j = 0; j < 24; j++){
+				vertex_transform[i] = vertex_transform[i] + T(s_weight[j]) * G[j][i];
+			}
+		}
+
+		T vertex_pos_aft[3] = { T(0.0) };
+		vertex_pos_aft[0] =
+			vertex_transform[0] * vertex_pos_bef[0] + vertex_transform[4] * vertex_pos_bef[1] +
+			vertex_transform[8] * vertex_pos_bef[2] + vertex_transform[12] + x_trans[0];
+		vertex_pos_aft[1] =
+			vertex_transform[1] * vertex_pos_bef[0] + vertex_transform[5] * vertex_pos_bef[1] +
+			vertex_transform[9] * vertex_pos_bef[2] + vertex_transform[13] + x_trans[1];
+		vertex_pos_aft[2] =
+			vertex_transform[2] * vertex_pos_bef[0] + vertex_transform[6] * vertex_pos_bef[1] +
+			vertex_transform[10] * vertex_pos_bef[2] + vertex_transform[14] + x_trans[2];
+
+		//方案2
+		//^T
+		/*T G_T[24][16] = { T(0.0) };
+		for (int jt = 0; jt < 24; jt++){
+			G_T[jt][0] = G[jt][0];  G_T[jt][1] = G[jt][4]; G_T[jt][2] = G[jt][8];  G_T[jt][3] = G[jt][12];
+			G_T[jt][4] = G[jt][1];  G_T[jt][5] = G[jt][5]; G_T[jt][6] = G[jt][9];  G_T[jt][7] = G[jt][13];
+			G_T[jt][8] = G[jt][2];  G_T[jt][9] = G[jt][6]; G_T[jt][10] = G[jt][10]; G_T[jt][11] = G[jt][14];
+			G_T[jt][12] = G[jt][3];  G_T[jt][13] = G[jt][7]; G_T[jt][14] = G[jt][11]; G_T[jt][15] = G[jt][15];
+		}
+
+		for (int i = 0; i < 16; i++){
+			for (int j = 0; j < 24; j++){
+				vertex_transform[i] = vertex_transform[i] + T(s_weight[j]) * G_T[j][i];
+			}
+		}
+
+		T vertex_pos_aft[3] = { T(0.0) };
+		vertex_pos_aft[0] =
+			vertex_transform[0] * vertex_pos_bef[0] + vertex_transform[1] * vertex_pos_bef[1] +
+			vertex_transform[2] * vertex_pos_bef[2] + vertex_transform[3] + x_trans[0];
+		vertex_pos_aft[1] =
+			vertex_transform[4] * vertex_pos_bef[0] + vertex_transform[5] * vertex_pos_bef[1] +
+			vertex_transform[6] * vertex_pos_bef[2] + vertex_transform[7] + x_trans[1];
+		vertex_pos_aft[2] =
+			vertex_transform[8] * vertex_pos_bef[0] + vertex_transform[9] * vertex_pos_bef[1] +
+			vertex_transform[10] * vertex_pos_bef[2] + vertex_transform[11] + x_trans[2];*/
+		
+		//end
+		
+
+		//v_shape 蒙皮变形后的模型
+		v_shaped_(3 * index_ + 0) = vertex_pos_aft[0];						
+		v_shaped_(3 * index_ + 1) = vertex_pos_aft[1];
+		v_shaped_(3 * index_ + 2) = vertex_pos_aft[2];
+
+	}
+
+}
+template void SMPL::test_ceres_pos<float>(float);
 
 void SMPL::updateNormal()
 {

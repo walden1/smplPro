@@ -42,7 +42,7 @@ void SMPL::loadTemplateMesh(std::string file)
 {
 	Eigen::MatrixXf vert;
 	//readDenseMatrixFromFile<float>(path_in_ + "template_mesh_v.txt", vert);	logI("read template_mesh_v done.\n");
-	//readDenseMatrixFromObj<float>(path_in_ + "template_mesh_ĞŞ¸Ä.obj", vert);	logI("read template_mesh_v done.\n");
+	//readDenseMatrixFromObj<float>(path_in_ + "template_mesh_ä¿®æ”¹.obj", vert);	logI("read template_mesh_v done.\n");
 	readDenseMatrixFromObj<float>(path_in_ + "T_template_mesh_edit_scale1.obj", vert);	logI("read template_mesh_v done.\n");
 	v_num_ = vert.rows();
 	v_template_ = mapEigenMat2Vec<float>(vert, true); // row major map, x1, y1, z1, x2, y2, z2, ...
@@ -75,7 +75,7 @@ void SMPL::randomPose()
 	//ss << file_name;
 	//ss >> file_name_str;
 
-	////±£´æËæ»úpose
+	////ä¿å­˜éšæœºpose
 	//saveRandomPose2File<float>(file_name_str, theta_);
 	//count++;
 }
@@ -88,11 +88,11 @@ void SMPL::updateShape()
 	Eigen::VectorXf v_shaped = shape_bs_ * beta_ + v_template_;				// Ts = T + Bs = T + s * belta   
 //	v_shaped = v_template_;
 
-	Eigen::MatrixXf J = joint_weights_ * mapEigenVec2Mat<float>(v_shaped, 3, true);		//¼ÆËãjoint×ø±ê
+	Eigen::MatrixXf J = joint_weights_ * mapEigenVec2Mat<float>(v_shaped, 3, true);		//è®¡ç®—jointåæ ‡
 
 	//saveShapeAsObjMesh("../joint_pos.obj", J, Eigen::MatrixXi());
 
-	Eigen::MatrixXf R = calcRotMat(theta_);			//½«theta ×ªÎª Ğı×ª¾ØÕó 24*3 --> 216¸öÔªËØµÄĞı×ª¾ØÕó 24*9 ---> 23 * 9 = 207
+	Eigen::MatrixXf R = calcRotMat(theta_);			//å°†theta è½¬ä¸º æ—‹è½¬çŸ©é˜µ 24*3 --> 216ä¸ªå…ƒç´ çš„æ—‹è½¬çŸ©é˜µ 24*9 ---> 23 * 9 = 207
 	int n = theta_.rows();
 	Eigen::MatrixXf I(3 * n - 3, 3);
 	for (int i = 0; i < n - 1; i++)
@@ -104,9 +104,9 @@ void SMPL::updateShape()
 //	v_posed = v_template_;
 	v_posed = v_shaped;
 
-	//ÃÉÆ¤
+	//è’™çš®
 	Eigen::MatrixXf G = calcJointRot(R, J);
-	Eigen::MatrixXf T = skin_weights_ * mapEigenMat2Mat(G, 16, true);  // (6890,16) transformation matrix for all vertex ¼ÆËãÃ¿¸ö¶¥µãµÄ±ä»»¾ØÕó
+	Eigen::MatrixXf T = skin_weights_ * mapEigenMat2Mat(G, 16, true);  // (6890,16) transformation matrix for all vertex è®¡ç®—æ¯ä¸ªé¡¶ç‚¹çš„å˜æ¢çŸ©é˜µ
 
 	for (int i = 0; i < v_num_; i++)
 	{
@@ -115,7 +115,7 @@ void SMPL::updateShape()
 		Eigen::Vector4f vpose;
 		vpose << v_posed(3 * i), v_posed(3 * i + 1), v_posed(3 * i + 2), 1.0;
 		vpose = Tmat * vpose;
-		v_shaped_(3 * i) = vpose(0) + trans_(0);						//v_shape ÃÉÆ¤±äĞÎºóµÄÄ£ĞÍ
+		v_shaped_(3 * i) = vpose(0) + trans_(0);						//v_shape è’™çš®å˜å½¢åçš„æ¨¡å‹
 		v_shaped_(3 * i + 1) = vpose(1) + trans_(1);
 		v_shaped_(3 * i + 2) = vpose(2) + trans_(2);
 	}
@@ -130,7 +130,7 @@ void SMPL::updateShape()
 	saveShapeAsObjMesh("../data/generatedBycode/v_template.obj", v_template_, faces_);
 	saveShapeAsObjMesh("../data/generatedBycode/v_shaped.obj", v_shaped, faces_);
 	saveShapeAsObjMesh("../data/generatedBycode/v_posed.obj", v_posed, faces_);
-	saveShapeAsObjMesh("../data/generatedBycode/v_shape_.obj", v_shaped_, faces_);	//×îÖÕlbs±äĞÎ½á¹û
+	saveShapeAsObjMesh("../data/generatedBycode/v_shape_.obj", v_shaped_, faces_);	//æœ€ç»ˆlbså˜å½¢ç»“æœ
 	saveDenseMatrix2File<float>("../data/generatedBycode/v_template.txt", v_template_);
 	saveDenseMatrix2File<float>("../data/generatedBycode/v_shaped.txt", v_shaped);
 	saveDenseMatrix2File<float>("../data/generatedBycode/v_posed.txt", v_posed);
@@ -261,7 +261,7 @@ void SMPL::test_ceres_pos(T temp){
 		Eigen::RowVectorXf s_weight = skin_weights_ptr_->row(index_);
 		T vertex_transform[16] = { T(0.0) };
 
-		//·½°¸1
+		//æ–¹æ¡ˆ1
 		for (int i = 0; i < 16; i++){
 			for (int j = 0; j < 24; j++){
 				vertex_transform[i] = vertex_transform[i] + T(s_weight[j]) * G[j][i];
@@ -279,7 +279,7 @@ void SMPL::test_ceres_pos(T temp){
 			vertex_transform[2] * vertex_pos_bef[0] + vertex_transform[6] * vertex_pos_bef[1] +
 			vertex_transform[10] * vertex_pos_bef[2] + vertex_transform[14] + x_trans[2];
 
-		//·½°¸2
+		//æ–¹æ¡ˆ2
 		//^T
 		/*T G_T[24][16] = { T(0.0) };
 		for (int jt = 0; jt < 24; jt++){
@@ -309,7 +309,7 @@ void SMPL::test_ceres_pos(T temp){
 		//end
 		
 
-		//v_shape ÃÉÆ¤±äĞÎºóµÄÄ£ĞÍ
+		//v_shape è’™çš®å˜å½¢åçš„æ¨¡å‹
 		v_shaped_(3 * index_ + 0) = vertex_pos_aft[0];						
 		v_shaped_(3 * index_ + 1) = vertex_pos_aft[1];
 		v_shaped_(3 * index_ + 2) = vertex_pos_aft[2];
@@ -436,7 +436,7 @@ Eigen::Matrix3f SMPL::rodrigues(const Eigen::Vector3f & r)
 {
 	// ref: https://docs.opencv.org/2.4/modules/calib3d/doc/camera_calibration_and_3d_reconstruction.html#void%20Rodrigues(InputArray%20src,%20OutputArray%20dst,%20OutputArray%20jacobian)
 	float theta = r.norm();
-	if (abs(theta) < 0.0001)
+	if (std::abs(theta) < 0.0001)
 		return Eigen::Matrix3f::Identity(3, 3);
 
 	Eigen::Vector3f s = r.normalized();
